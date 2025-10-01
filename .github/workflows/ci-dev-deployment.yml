@@ -32,7 +32,13 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: dev
+    env:
+      TAG: dev-v1.0
+      NOTE: "First development release"
     steps:
+      - name: Checkout   # 🔑 讓 runner 有 .git
+        uses: actions/checkout@v4
+
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
@@ -41,7 +47,5 @@ jobs:
       - name: Release Dev Build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ vars.BUILD_TAG }}
-          NOTE: ${{ vars.RELEASE_NOTE }}
         run: |
           gh release create "$TAG" build.zip --notes "$NOTE"
