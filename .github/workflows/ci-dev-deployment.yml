@@ -2,7 +2,7 @@ name: CI Dev Deployment
 
 on:
   push:
-    branches: [ master ]  # 當 main 分支有 push 時觸發
+    branches: [ master ]  # 當 master 分支有 push 時觸發
 
 jobs:
   build:
@@ -10,6 +10,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
 
       - name: Build
         run: |
