@@ -1,0 +1,125 @@
+name: CI/CD Deployment Pipeline
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # allow pushing tags / creating releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install & Build
+        run: |
+          npm install
+          npm run build
+          zip -r build.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: build.zip
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: Stagging   # ⚠️ 對應你的環境名稱
+    env:
+      TAG: ${{ vars.BUILD_TAG }}
+      NOTE: ${{ vars.RELEASE_NOTE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Create annotated tag and push (Stagging)
+        env:
+          TAG: ${{ env.TAG }}
+          NOTE: ${{ env.NOTE }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "TAG is empty — aborting"
+            exit 1
+          fi
+          if git rev-parse --verify "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "$NOTE"
+            git push origin "$TAG"
+          fi
+
+      - name: Create Release (Stagging)
+        env:
+          TAG: ${{ env.TAG }}
+          NOTE: ${{ env.NOTE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" build.zip --notes "$NOTE" || echo "Release may already exist"
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: Production   # ⚠️ 對應你的環境名稱
+    env:
+      TAG: ${{ vars.BUILD_TAG }}
+      NOTE: ${{ vars.RELEASE_NOTE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Create annotated tag and push (Production)
+        env:
+          TAG: ${{ env.TAG }}
+          NOTE: ${{ env.NOTE }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "TAG is empty — aborting"
+            exit 1
+          fi
+          if git rev-parse --verify "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "$NOTE"
+            git push origin "$TAG"
+          fi
+
+      - name: Create Release (Production)
+        env:
+          TAG: ${{ env.TAG }}
+          NOTE: ${{ env.NOTE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" build.zip --notes "$NOTE" || echo "Release may already exist"
