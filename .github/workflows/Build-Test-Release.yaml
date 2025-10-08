@@ -9,23 +9,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 取得專案程式碼
+      # 取得專案程式碼
       - uses: actions/checkout@v4
 
-      # 2️⃣ 安裝 Node.js (使用最新 LTS)
+      # 安裝 Node.js
       - uses: actions/setup-node@v3
         with:
           node-version: "18"
 
-      # 3️⃣ 安裝依賴
+      # 安裝依賴
       - name: Install dependencies
         run: npm install
 
-      # 4️⃣ Build
+      # Build
       - name: Build
         run: npm run build
 
-      # 5️⃣ 上傳 build artifact
+      # 上傳 build artifact
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifact
@@ -35,20 +35,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      # 1️⃣ 下載 build artifact
+      # 下載 build artifact
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
 
-      # 2️⃣ 安裝 Node.js
+      # 安裝 Node.js
       - uses: actions/setup-node@v3
         with:
           node-version: "18"
 
-      # 3️⃣ 安裝依賴
+      # 安裝依賴
       - run: npm install
 
-      # 4️⃣ 執行測試
+      # 執行測試
       - name: Run Automated Tests
         run: |
           echo "Running automated tests..."
@@ -59,17 +59,17 @@ jobs:
     needs: test
     environment: dev
     steps:
-      # 1️⃣ 下載 build artifact
+      # 下載 build artifact
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
 
-      # 2️⃣ 安裝 Node.js
+      # 安裝 Node.js
       - uses: actions/setup-node@v3
         with:
           node-version: "18"
 
-      # 3️⃣ Release
+      # Release
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
