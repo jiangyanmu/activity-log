@@ -1,5 +1,9 @@
 name: Build-Test-Release
 
+# 明確宣告 token 權限（需要寫入 release/artifacts）
+permissions:
+  contents: write
+
 on:
   push:
     branches: [master]
@@ -48,7 +52,9 @@ jobs:
 
       - name: Set BUILD_TAG
         id: set_tag
-        run: echo "build_tag=${{ env.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_ENV
+        run: |
+          echo "build_tag=${{ env.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_ENV
+          echo "::set-output name=build_tag::${{ env.TEST_ENV }}-${{ github.run_number }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -131,6 +137,8 @@ jobs:
           prerelease: true
       - name: Upload Staging Artifact
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # <- 必須帶 token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: dist.zip
@@ -167,6 +175,8 @@ jobs:
           prerelease: false
       - name: Upload Production Artifact
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: dist.zip
