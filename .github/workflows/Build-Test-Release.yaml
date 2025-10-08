@@ -15,8 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_tag: ${{ steps.set_tag.outputs.build_tag }}
+    env:
+      TEST_ENV: ${{ github.event.inputs.TEST_ENV || 'staging' }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
@@ -45,7 +48,7 @@ jobs:
 
       - name: Set BUILD_TAG
         id: set_tag
-        run: echo "build_tag=${{ github.event.inputs.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
+        run: echo "build_tag=${{ env.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
@@ -56,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     env:
-      TEST_ENV: ${{ github.event.inputs.TEST_ENV }}
+      TEST_ENV: ${{ env.TEST_ENV }}
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -69,11 +72,7 @@ jobs:
           path: dist/
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - name: Run Unit Tests
         run: |
           echo "🧪 Running Unit Tests in $TEST_ENV"
@@ -83,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     env:
-      TEST_ENV: ${{ github.event.inputs.TEST_ENV }}
+      TEST_ENV: ${{ env.TEST_ENV }}
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -96,11 +95,7 @@ jobs:
           path: dist/
       - name: Install dependencies
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
       - name: Run Integration Tests
         run: |
           echo "🧩 Running Integration Tests in $TEST_ENV"
@@ -109,7 +104,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: [test-unit, test-integration]
-    if: ${{ github.event.inputs.TEST_ENV == 'staging' }}
+    if: ${{ env.TEST_ENV && env.TEST_ENV.toLowerCase() == 'staging' }}
     environment: staging
     env:
       TEST_ENV: staging
@@ -144,7 +139,7 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     needs: [test-unit, test-integration]
-    if: ${{ github.event.inputs.TEST_ENV == 'production' }}
+    if: ${{ env.TEST_ENV && env.TEST_ENV.toLowerCase() == 'production' }}
     environment: production
     env:
       TEST_ENV: production
