@@ -26,7 +26,7 @@ jobs:
           node-version: "18"
 
       - name: Cache node modules
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Set BUILD_TAG
         id: set_tag
-        run: echo "build_tag=${{ env.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_ENV
+        run: echo "build_tag=${{ env.TEST_ENV }}-${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,7 +104,7 @@ jobs:
   deploy-staging:
     runs-on: ubuntu-latest
     needs: [test-unit, test-integration]
-    if: ${{ github.event.inputs.TEST_ENV == 'staging' || github.event_name == 'push' }}
+    if: ${{ ((github.event.inputs.TEST_ENV || 'staging') | toLowerCase()) == 'staging' }}
     environment: staging
     env:
       TEST_ENV: staging
@@ -119,7 +119,6 @@ jobs:
       - name: Package build files
         run: zip -r dist.zip dist
       - name: Create Staging Release
-        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -140,7 +139,7 @@ jobs:
   deploy-production:
     runs-on: ubuntu-latest
     needs: [test-unit, test-integration]
-    if: ${{ github.event.inputs.TEST_ENV == 'production' }}
+    if: ${{ ((github.event.inputs.TEST_ENV || 'staging') | toLowerCase()) == 'production' }}
     environment: production
     env:
       TEST_ENV: production
@@ -155,7 +154,6 @@ jobs:
       - name: Package build files
         run: zip -r dist.zip dist
       - name: Create Production Release
-        id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
