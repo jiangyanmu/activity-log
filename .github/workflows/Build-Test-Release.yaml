@@ -9,25 +9,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ 取得專案原始碼
+      # 1️⃣ 取得專案程式碼
       - uses: actions/checkout@v4
 
-      # 2️⃣ 安裝 Bun
-      - name: Install Bun
-        run: |
-          curl -fsSL https://bun.sh/install | bash
-          echo "BUN_INSTALL=$HOME/.bun" >> $GITHUB_ENV
-          echo "$HOME/.bun/bin" >> $GITHUB_PATH
-          bun --version
+      # 2️⃣ 安裝 Node.js (使用最新 LTS)
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "18"
 
-      # 3️⃣ 安裝依賴與 build
+      # 3️⃣ 安裝依賴
+      - name: Install dependencies
+        run: npm install
+
+      # 4️⃣ Build
       - name: Build
-        run: |
-          npm install
-          bun i
-          ncc build src/index.js --license licenses.txt
+        run: npm run build
 
-      # 4️⃣ 上傳 build 產物供後續 job 使用
+      # 5️⃣ 上傳 build artifact
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifact
@@ -37,12 +35,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      # 1️⃣ 下載 build 產物
+      # 1️⃣ 下載 build artifact
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
 
-      # 2️⃣ 執行測試
+      # 2️⃣ 安裝 Node.js
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      # 3️⃣ 安裝依賴
+      - run: npm install
+
+      # 4️⃣ 執行測試
       - name: Run Automated Tests
         run: |
           echo "Running automated tests..."
@@ -53,15 +59,21 @@ jobs:
     needs: test
     environment: dev
     steps:
-      # 1️⃣ 下載 build 產物
+      # 1️⃣ 下載 build artifact
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
 
-      # 2️⃣ Release 產物到 GitHub
+      # 2️⃣ 安裝 Node.js
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+
+      # 3️⃣ Release
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "✅ Tests passed. Releasing new dev build..."
+          # 建立 GitHub Release
           gh release create "dev-$(date +%s)" dist/* --notes "Automated release after successful tests"
