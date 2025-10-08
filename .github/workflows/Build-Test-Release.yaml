@@ -4,68 +4,177 @@ on:
   push:
     branches: [ master ]
   workflow_dispatch:
+    inputs:
+      TEST_ENV:
+        description: 'Test/Deploy environment (staging or prod)'
+        required: true
+        default: staging
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      build_tag: ${{ steps.set_tag.outputs.build_tag }}
     steps:
       - uses: actions/checkout@v4
-      - name: Cache Node modules
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Cache node modules
         uses: actions/cache@v3
         with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-      - name: Install dependencies and build
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Pack dist for artifact upload
         run: |
-          npm install
-          npm run build
+          if [ -d dist ]; then
+            zip -r dist.zip dist
+          else
+            echo "dist not found" && exit 1
+          fi
+      - name: Set BUILD_TAG output
+        id: set_tag
+        run: echo "::set-output name=build_tag::${{ github.event.inputs.TEST_ENV }}-${{ github.run_number }}"
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifact
-          path: dist/
+          path: |
+            dist/
+            dist.zip
 
-  test:
+  test-unit:
     runs-on: ubuntu-latest
     needs: build
+    env:
+      TEST_ENV: ${{ github.event.inputs.TEST_ENV }}
     steps:
       - uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
           path: dist/
-      - name: Cache Node modules
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-      - name: Run Automated Tests
+      - name: Install deps for tests
+        run: npm ci
+      - name: Run unit tests
         run: |
-          echo "Running automated tests..."
-          npm install
-          npm test || (echo "❌ Tests failed" && exit 1)
+          echo "Running unit tests (TEST_ENV=$TEST_ENV)"
+          npm run test:unit
+      - name: Upload unit test results (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: test-results-unit || true
 
-  release:
+  test-integration:
     runs-on: ubuntu-latest
-    needs: test
-    environment: dev
+    needs: build
+    env:
+      TEST_ENV: ${{ github.event.inputs.TEST_ENV }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: dist/
+      - name: Install deps for tests
+        run: npm ci
+      - name: Run integration tests
+        run: |
+          echo "Running integration tests (TEST_ENV=$TEST_ENV)"
+          npm run test:integration
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [ test-unit, test-integration ]
+    if: ${{ github.event.inputs.TEST_ENV == 'staging' || github.event.inputs.TEST_ENV == 'prod' }}
+    environment: staging
+    env:
+      TEST_ENV: staging
+      BUILD_TAG: ${{ github.event.inputs.TEST_ENV }}-${{ github.run_number }}
+      RELEASE_NOTE: "Staging release from workflow #${{ github.run_number }}"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: build-artifact
           path: dist/
-      - name: Release
-        # 新增環境變數 BUILD_TAG 與 RELEASE_NOTE
+      - name: Prepare release package
+        run: |
+          ls -la dist
+          if [ ! -f dist.zip ]; then
+            zip -r dist.zip dist
+          fi
+      - name: Create Staging Release
+        id: create_release_staging
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_TAG: dev-${{ github.run_number }}
-          RELEASE_NOTE: "Automated release after successful tests"
+        with:
+          tag_name: ${{ env.BUILD_TAG }}
+          release_name: ${{ env.BUILD_TAG }}
+          body: ${{ env.RELEASE_NOTE }}
+          draft: false
+          prerelease: true
+      - name: Upload asset to staging release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release_staging.outputs.upload_url }}
+          asset_path: dist.zip
+          asset_name: dist-${{ github.run_number }}.zip
+          asset_content_type: application/zip
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    # 只有當 dispatch input 選擇 prod 時才執行 production job
+    if: ${{ github.event.inputs.TEST_ENV == 'prod' }}
+    environment: production   # <-- 這會觸發 GitHub 環境保護 (required reviewers)
+    env:
+      TEST_ENV: production
+      BUILD_TAG: ${{ github.event.inputs.TEST_ENV }}-${{ github.run_number }}
+      RELEASE_NOTE: "Production release from workflow #${{ github.run_number }}"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: dist/
+      - name: Prepare release package
         run: |
-          echo "✅ Tests passed. Releasing new dev build..."
-          echo "Build tag: $BUILD_TAG"
-          echo "Release note: $RELEASE_NOTE"
-          gh release create "$BUILD_TAG" dist/* --notes "$RELEASE_NOTE"
+          if [ ! -f dist.zip ]; then
+            zip -r dist.zip dist
+          fi
+      - name: Create Production Release
+        id: create_release_prod
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.BUILD_TAG }}
+          release_name: ${{ env.BUILD_TAG }}
+          body: ${{ env.RELEASE_NOTE }}
+          draft: false
+          prerelease: false
+      - name: Upload asset to production release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release_prod.outputs.upload_url }}
+          asset_path: dist.zip
+          asset_name: dist-${{ github.run_number }}.zip
+          asset_content_type: application/zip
