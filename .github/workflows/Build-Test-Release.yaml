@@ -24,16 +24,18 @@ jobs:
       # 4️⃣ 安裝依賴
       - name: Install dependencies
         run: npm install
+        working-directory: activity-log
 
       # 5️⃣ Build
       - name: Build
         run: npm run build
+        working-directory: activity-log
 
       # 6️⃣ 上傳 build artifact
       - uses: actions/upload-artifact@v4
         with:
           name: build-artifact
-          path: dist/
+          path: activity-log/dist/
 
   test:
     runs-on: ubuntu-latest
@@ -50,13 +52,14 @@ jobs:
           node-version: "18"
 
       # 3️⃣ 安裝依賴
-      - run: npm install
+      - name: Install dependencies
+        run: npm install
+        working-directory: activity-log
 
       # 4️⃣ 執行測試
       - name: Run Automated Tests
-        run: |
-          echo "Running automated tests..."
-          npm test || (echo "❌ Tests failed" && exit 1)
+        run: npm test
+        working-directory: activity-log
 
   release:
     runs-on: ubuntu-latest
@@ -79,4 +82,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "✅ Tests passed. Releasing new dev build..."
-          gh release create "dev-$(date +%s)" dist/* --notes "Automated release after successful tests"
+          gh release create "dev-$(date +%s)" activity-log/dist/* --notes "Automated release after successful tests"
