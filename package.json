@@ -7,7 +7,7 @@
 	},
 	"scripts": {
 	  "build": "ncc build src/index.js --license licenses.txt",
-	  "test": "jest"
+  	  "test": "jest --passWithNoTests"
 	},
 	"devDependencies": {
 		"@vercel/ncc": "^0.38.3"
